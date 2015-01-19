@@ -1,5 +1,5 @@
-#ifndef MD5_H  
-#define MD5_H  
+#ifndef _IM_MD5_H  
+#define _IM_MD5_H  
   
 typedef struct  
 {  
