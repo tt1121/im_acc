@@ -6,6 +6,7 @@
 ** 修改历史:
 ** 2014-12-27   张斌创建本文件；
 ##############################################################################*/
+#include "json-c/json.h"
 
 
 #ifndef __IM_JSON_PARSE_H__
@@ -27,12 +28,14 @@ extern int im_json_make_cmd_getaacflow(S_IM_CLOUD_DATA_GETAACFLOW_CMD *TASKID, c
 extern int im_json_make_cmd_flowinfo(S_IM_CLOUD_DATA_LOGIN_RESP *flowinfo, char *msg);
 extern int im_json_make_cmd_acclist(S_IM_CLOUD_DATA_LOGIN_RESP *acclist, char *msg);
 extern int im_json_make_cmd_accinfo(S_IM_CLOUD_DATA_LOGIN_RESP *accinfo, char *msg);
+extern int im_json_make_cmd_gettaskresult(S_IM_CLOUD_DATA_TASKRESULT_CMD*accinfo, char *msg);
 
 
 extern int im_json_make_udp_brocast(const char *p_msg, int errcode, 
 											char *data, char *send_msg);
 
-extern int im_json_make_termres_startacc(char *json_data);
-extern int im_json_make_termres_speedupinfo(char *json_data);
+extern int im_json_make_termres_startacc(json_object *json_data,json_object *pDataObj);
+extern int im_json_make_termres_speedupinfo(json_object *json_data,json_object *pDataObj);
+extern int im_json_make_cmd_brocast_IOS( char *msg,  char *noty_msg,char *sign);
 
 #endif

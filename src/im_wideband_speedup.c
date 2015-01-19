@@ -14,18 +14,18 @@
 
 #include "msg.h"
 #include "im_wideband_speedup.h"
-//#include "im_queue.h"
+#include <time.h>
+
 //#include "im_json_parse.h"
 
 
 
-#define SOCKET_MODULE		"im_wideband_acc"
-#define WAN_IFNAME			"eth1"
-#define LAN_IFNAME			"br-lan"
+#define SOCKET_MODULE		"im_acc"
 
 extern int im_cloud_login(char *url);
 extern int im_get_local_ipv4(char *ifname, char *local_ip);
 extern int im_handle_msg(char *p_msg, int acc_socket);
+extern int im_auto_query_isacc();
 
 const char *jason_key[]=
 {
@@ -48,7 +48,7 @@ const char *jason_key[]=
 	"is_acc",
 	"total_flow",
 	"remain_flow",
-	"get_flow",
+	"unget_flow",
 	"get_flow_id",
 	"get_flow_info",
 	"peak_flow",
@@ -61,33 +61,66 @@ const char *jason_key[]=
 	"send_inform_Id",
 	"send_inform_msg",
 	"acc_time",
-	"acc_url"
-	
-	
+	"acc_url",
+	"acc_state",
+	"ip",
+	"devicetoken",
+	"devid",
+	"task_id",
+	"badge",
+	"message",
+	"rand",
+	"module"
 };
 
 S_IM_MSG_HEADER s_im_cmd_header;
 S_IM_TERMSG_DATA_SPEEDUP_CMD s_im_speedup;
 S_IM_TERMSG_DATA_GETFLOW_CMD s_im_getflow;
 S_IM_TERMSG_DATA_KEEPACC_CMD s_im_keepacc;
+S_IM_TERMSG_DATA_IOSINFO_CMD s_im_iosinfo[MAX_IOS_DEV];
 
-S_IM_CLOUD_DATA_LOGIN_CMD	 s_im_login_cmd;
-S_IM_CLOUD_DATA_LOGIN_RESP	 s_im_login_resp;
-S_IM_CLOUD_DATA_ACC_CMD		 s_im_acc;
-S_IM_TERMSG_DATA_ISACC_RESP  s_im_isacc_resp;
-S_IM_TERMSG_DATA_STARTACC_RESP s_im_startacc_resp;
+
+S_IM_CLOUD_DATA_LOGIN_CMD	    s_im_login_cmd;
+S_IM_CLOUD_DATA_LOGIN_RESP	    s_im_login_resp;
+S_IM_CLOUD_DATA_ACC_CMD		    s_im_acc;
+S_IM_CLOUD_DATA_ISACC_RESP      s_im_isacc_resp;
+S_IM_TERMSG_DATA_STARTACC_RESP  s_im_startacc_resp;
 S_IM_TERMSG_DATA_FLOW_INFO_RESP s_im_flowinfo_resp;
-S_IM_CLOUD_DATA_ACCSPEC_RESP s_im_accspec;
-S_IM_CLOUD_DATA_COUNTFLOW_CMD s_im_countflow_cmd;
-S_IM_CLOUD_DATA_GETAACFLOW_CMD s_im_getaacflow_cmd;
+S_IM_CLOUD_DATA_ACCSPEC_RESP    s_im_accspec;
+S_IM_CLOUD_DATA_COUNTFLOW_CMD   s_im_countflow_cmd;
+S_IM_CLOUD_DATA_GETAACFLOW_CMD  s_im_getaacflow_cmd;
 S_IM_TERMSG_DATA_SPEEDUP_INFO_RESP s_im_speedupinfo_resp;
+S_IM_TERMSG_DATA_UNGETFLOW_RESP s_im_ungetflow_resp;
+S_IM_TERMSG_DATA_PEAKFLOW_RESP	s_im_peakflow_resp;
+S_IM_TERMSG_DATA_ACCLIST_RESP	s_im_acclist_resp;
+S_IM_CLOUD_DATA_HEARTBEAT_RESP	s_im_heartbeat_resp;
+S_IM_CLOUD_DATA_TASKRESULT_CMD  s_im_taskresult_cmd;
 
+
+/******************************************************************
+function:   查询网络是否改变，改变返回MSG_CODE_SUCESS
+params:
+return: MSG_CODE_SUCESS, MSG_CODE_FORMAT_ERR
+*********************************************************************/
+int im_check_isnet_change(void)
+{
+	int ret = MSG_CODE_SUCESS;
+	
+	config_read_im_acc(NULL);
+
+	if(!strcmp(uci_save_ip,s_im_login_resp.im_ip))
+		ret = MSG_CODE_UNKNOWN;
+	printf("uciip=%s,loginip=%s ret=%d\n",uci_save_ip,s_im_login_resp.im_ip,ret);
+
+	return ret;
+}
 
 void im_init_session(void)
 {
 	strcpy(s_im_acc.im_session_id, s_im_login_resp.im_session_id);
 	strcpy(s_im_countflow_cmd.im_session_id, s_im_login_resp.im_session_id);
 	strcpy(s_im_getaacflow_cmd.im_session_id, s_im_login_resp.im_session_id);
+	strcpy(s_im_taskresult_cmd.im_session_id, s_im_login_resp.im_session_id);
 }
 
 int im_windband_init(void)
@@ -99,10 +132,24 @@ int im_windband_init(void)
 //初始化查询/开启加速结构体
 	strcpy(s_im_acc.im_dev_id, s_im_login_cmd.im_dev_id);
 	strcpy(s_im_acc.im_ip, s_im_login_cmd.im_ip);
-
 	
+	s_im_speedupinfo_resp.im_acc_state = STATE_ACC_CLOSED;
+
 	return ret;
 }
+
+char * get_format_time()
+{
+	static char tstr[64] = {0};
+	time_t t;		
+	
+	t = time(NULL);	
+	strcpy(tstr, ctime(&t));	
+	tstr[strlen(tstr)-1] = '\0';
+	
+	return tstr;
+}
+
 
 void im_check_internet_connect(void)
 {
@@ -126,26 +173,44 @@ void im_check_internet_connect(void)
 void im_start_login_cloud(char *url)
 {
 	int ret = MSG_CODE_SUCESS;
-
-	ret = im_get_local_ipv4(LAN_IFNAME, s_im_login_cmd.im_ip);
-	if (ret != MSG_CODE_SUCESS)
-	{
-		IM_DEBUG("im_get_local_ipv4 lanip fail");
-		return MSG_CODE_UNKNOWN;
-	}
-	
-	strcpy(s_im_login_cmd.im_dev_id, "imove_test 123456");
 	
 	do
 	{
-		ret = im_cloud_login(url);
+		ret = im_get_local_ipv4(LAN_IFNAME, s_im_login_cmd.im_ip);
 		if (ret != MSG_CODE_SUCESS)
 		{
-			sleep(10);
+			IM_DEBUG("im_get_local_ipv4 lanip fail");
+			sleep(20);
+			continue;
 		}
 		
-	}while(ret != MSG_CODE_SUCESS);
+	} while(ret != MSG_CODE_SUCESS);
+	
+	strcpy(s_im_login_cmd.im_dev_id, "IMOVE00000001");
+	ret = im_cloud_login(url);
+	if (ret != MSG_CODE_SUCESS)
+	{
+		IM_DEBUG("login fail!!!!");
+		//sleep(10);
+	}
 }
+
+int im_isacc_init(void)
+{
+	int ret = MSG_CODE_SUCESS;
+	
+#if 0	
+	ret = im_check_isnet_change();
+	if(ret != MSG_CODE_SUCESS) //网络未改变不需要查询
+	{
+		return ret;
+	}
+#endif
+	im_auto_query_isacc();
+
+	return ret;
+}
+
 
 int main (int argc, char *argv[])
 {
@@ -164,6 +229,9 @@ int main (int argc, char *argv[])
 	im_check_internet_connect();
 	im_start_login_cloud(CLOUD_URL);
 	im_windband_init();
+	im_isacc_init();
+
+	init_alarm_post_config();    
 	
 	server_socket = IM_DomainServerInit(SOCKET_MODULE);  //初始化本地通信socket
 	if (server_socket < 0)
@@ -171,8 +239,6 @@ int main (int argc, char *argv[])
 		IM_DEBUG("IM_DomainServerInit error");
 		return -1;
 	}
-	
-
 	while(1)
     {
     	accept_socket = IM_ServerAcceptClient(server_socket);
@@ -184,11 +250,11 @@ int main (int argc, char *argv[])
 			}
 			else
 			{
-				perror("IM_ServerAcceptClient ERROR");
+				IM_DEBUG("IM_ServerAcceptClient ERROR");
 				return -1;
 			}
 		}
-
+		
 		ret = IM_MsgReceive(accept_socket, &p_msg, NULL);	
 		if (ret < 0)
         {
@@ -196,7 +262,8 @@ int main (int argc, char *argv[])
             IM_DomainServerDeinit(accept_socket);
 			continue;
         }
-
+	
+		printf("p_msg :%s\n",p_msg);
 		ret = im_handle_msg(p_msg, accept_socket); //解析消息成能识别的命令
 		if (ret != MSG_CODE_SUCESS)
 		{

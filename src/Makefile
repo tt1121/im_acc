@@ -1,5 +1,5 @@
 
-PROGRAM := wideband_speedup                      # 最后的可执行文件
+PROGRAM := im_acc                      # 最后的可执行文件
 
 SOURCES := $(wildcard *.c)                 #通配当前目录下说有的.c文件
 OBJS    := $(patsubst %.c,%.o,$(SOURCES))  #把$(SOURCES)中的变量符合后缀是.c的全部替换成.o，

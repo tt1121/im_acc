@@ -36,7 +36,7 @@ int im_udpclient_init(int *socketfd, struct sockaddr_in *addrto)
 		IM_DEBUG("socket fail");  
 		return -1;  
 	}	  
-	
+	#if 0
 	strncpy(ifr.ifr_name,IFNAME,strlen(IFNAME));
 	//发送命令，获得网络接口的广播地址
 	if(ioctl(*socketfd, SIOCGIFBRDADDR, &ifr) == -1){
@@ -49,10 +49,13 @@ int im_udpclient_init(int *socketfd, struct sockaddr_in *addrto)
 	memcpy(addrto, &ifr.ifr_broadaddr, sizeof(struct sockaddr_in));
 	//设置广播端口号
 	printf("broadcast IP is:%s\n",inet_ntoa(addrto->sin_addr));
-	
+	#endif
+	inet_aton("192.168.222.255", &addrto->sin_addr);
+//	printf("broadcast IP is:%s\n",inet_ntoa(addrto->sin_addr));
     addrto->sin_family = AF_INET;  
 //    addrto->sin_addr.s_addr=htonl(INADDR_BROADCAST);  
     addrto->sin_port = htons(MCAST_PORT);  
+	printf("broadcast IP is:%s\n",inet_ntoa(addrto->sin_addr));
 
 	  
     //设置该套接字为广播类型，  
@@ -65,13 +68,13 @@ int im_udpclient_init(int *socketfd, struct sockaddr_in *addrto)
 	return ret;
 }
 
-int im_udp_sendmsg(char *msg)
+int im_udp_sendmsg(void *msg)
 {
 	int socketfd = -1;
 	struct sockaddr_in addrto;
 	int nlen = sizeof(struct sockaddr);
 	int ret = MSG_CODE_SUCESS;
-	
+
 	if (!msg)
 	{
 		IM_DEBUG("parameter error");
@@ -85,7 +88,7 @@ int im_udp_sendmsg(char *msg)
 		IM_DEBUG("im_udpclient_init fail");
 		return MSG_CODE_UNKNOWN;
 	}
-	
+	printf("udp = %s\n",msg);
     ret = sendto(socketfd, msg, strlen(msg), 0, (struct sockaddr*)&addrto, nlen);  
     if (ret < 0)
     {  

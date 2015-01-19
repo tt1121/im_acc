@@ -49,6 +49,8 @@ int im_curl_clean(CURL *curlhandle)
 	
 	curl_easy_cleanup(curlhandle);
 	curl_global_cleanup();
+
+	return 0;
 }
 
 int im_curl_perform(CURL *curlhandle)
@@ -86,12 +88,23 @@ int im_curl_perform(CURL *curlhandle)
 
 size_t im_get_respone(void *ptr, size_t size, size_t nmemb, void *stream)  
 {
-	char *httpresp = (char *)stream;
-	strcat(httpresp, ptr);
-	//printf("%s\n", ptr);
+	char *pstr = (char *)ptr;
+	char *httpresp = NULL;
+	int len = strlen(pstr);
+	
+	if (stream != NULL)
+	{
+		httpresp = (char *)stream;
+		strcat(httpresp, (char *)pstr);
+	}
+	else
+	{
+		len = 1;
+	}
+//	printf("%s\n", ptr); 
 	//int written = fwrite(ptr, size, nmemb, (FILE *)stream);
 	//return written;
-	return strlen(ptr);
+	return len;
 }
 
 int im_curl_send_msg(CURL *curlhandle, char *url, char *postdata, char *httpresp, int timeout)
@@ -110,16 +123,22 @@ int im_curl_send_msg(CURL *curlhandle, char *url, char *postdata, char *httpresp
 
 	curl_easy_setopt(curlhandle, CURLOPT_URL, url);
 	curl_easy_setopt(curlhandle, CURLOPT_CONNECTTIMEOUT, timeout);  // 设置连接超时，单位秒
+	curl_easy_setopt(curlhandle, CURLOPT_TIMEOUT, 5);//设置处理超时时间，5s
 	curl_easy_setopt(curlhandle, CURLOPT_HTTPHEADER, headers);
-	curl_easy_setopt(curlhandle, CURLOPT_WRITEFUNCTION, im_get_respone);
-	curl_easy_setopt(curlhandle, CURLOPT_WRITEDATA, httpresp);
+	
+	if (httpresp != NULL)
+	{
+		curl_easy_setopt(curlhandle, CURLOPT_WRITEFUNCTION, im_get_respone);
+		curl_easy_setopt(curlhandle, CURLOPT_WRITEDATA, httpresp);
+	}
 	
 	curl_easy_setopt(curlhandle, CURLOPT_NOPROGRESS, 1L);
-	//curl_easy_setopt(curlhandle, CURLOPT_VERBOSE, 1L);
+	curl_easy_setopt(curlhandle, CURLOPT_VERBOSE, 1L);
 	
 	curl_easy_setopt(curlhandle, CURLOPT_POSTFIELDS, postdata); 
 
 	ret = im_curl_perform(curlhandle);
+	curl_slist_free_all(headers);
 
 	return ret;
 }
@@ -129,6 +148,7 @@ int im_http_sendmsg(char *url, char *postdata, char *httpresp, int timeout)
 {
 	CURL *curlhandle = NULL;
 	int res = 0; 
+	int ret = 0;
 	
 	if (!url || !postdata )
 	{
@@ -140,18 +160,20 @@ int im_http_sendmsg(char *url, char *postdata, char *httpresp, int timeout)
 	if (res < 0)
 	{
 		IM_DEBUG("im_curl_init fail\n");
-		return -1;
+		goto err;
 	}
 
 	res = im_curl_send_msg(curlhandle, url, postdata, httpresp, timeout);
 	if (res < 0)
 	{
 		IM_DEBUG("im_curl_send_msg fail\n");
-		return -1;
-	}
+		goto err;
+	}	
 
-	res = im_curl_clean(curlhandle);
-	if (res < 0)
+
+err:
+	ret = im_curl_clean(curlhandle);
+	if (ret < 0)
 	{
 		IM_DEBUG("im_curl_clean fail\n");
 		return -1;
