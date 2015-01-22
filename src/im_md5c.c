@@ -162,6 +162,33 @@ void MD5Transform(unsigned int state[4],unsigned char block[64])
     state[3] += d;  
 }  
 
+int MD5File (char *filename,unsigned char digest[16])  
+{  
+	FILE *file;  
+	MD5_CTX context;  
+	int len;  
+	unsigned char buffer[1024];  
+  
+	if ((file = fopen (filename, "rb")) == NULL)  
+	{
+		return -1;  
+	}
+	else 
+	{  
+		MD5Init (&context);
+		
+		while (len = fread (buffer, 1, 1024, file))
+		{
+			MD5Update (&context, buffer, len);  
+		}
+		
+		MD5Final (&context, digest);  
+
+		fclose (file);  
+	}  
+	return 0;  
+} 
+
 int MD5(char *str, int len, char *decrypt)
 {
 	MD5_CTX md5;  
